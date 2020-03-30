@@ -1,22 +1,23 @@
 """ driver.py 
     
-    Author:     Mike Pagel <https://github.com/moltob>
-    Date:       11/01/2016
-    Modified:   
-        03/23/2019 by Carson Clarke-Magrab <ctc7359@rit.edu>
+    Author:     Carson Clarke-Magrab <ctc7359@rit.edu>
+    Date:       03/23/2019
+    Modified:
+        03/29/2019 by Carson Clarke-Magrab <ctc7359@rit.edu>
         -   Adapted for IDE virtual NXP Cup.
 """
 
 from client.car import Actuator, Sensor
 
 # Global variables
-TURN_AMT = 0.1;
-ACCL_AMT = 0.3
+EX_GLOBAL_VAR = 0   # Example global variable
+BANG_BANG_TRN = 0.2
+
 
 class Driver:
     """ Car driving logic
 
-        The Driver recieves a set of Sensor data from the server and transmits 
+        The Driver receives a set of Sensor data from the server and transmits
         a set of Actuator data in response. See car.py for more details on 
         these structures.
 
@@ -27,10 +28,14 @@ class Driver:
         remove the drive() function or change the name of the class.
     """
 
-    def init(self):
+    def __init__(self):
         """ If you need to initialize any variables, do it here and remove the 
             'pass' statement. 
         """
+
+        # Define class variables here
+        self.ex_class_var = 0   # Example class variables
+
         pass
 
     def drive(self, sensor: Sensor) -> Actuator:
@@ -38,27 +43,26 @@ class Driver:
             the server .
 
             Args:
-                sensor  - A set of Sensor values recived from the server
+                sensor  - A set of Sensor values received from the server
 
             Returns: An Actuator populated with commands to send to the server
         """
 
         command = Actuator()
 
-        # REPLACE ALL CODE BETWEEN THESE COMMENTS
-        if sensor.distance_from_center < 0:
-            command.steering = TURN_AMT
-            
-        elif sensor.distance_from_center > 0:
-            command.steering = -TURN_AMT
+        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
+        # Simple Bang-Bang controller
+        if sensor.distance_from_center < 0:
+            command.steering = BANG_BANG_TRN
+        elif sensor.distance_from_center > 0:
+            command.steering = -1 * BANG_BANG_TRN
         else:
             command.steering = 0
 
-        command.accelerator = ACCL_AMT
         command.gear = 1
-        # REPLACE ALL CODE BETWEEN THESE COMMENTS
+        command.accelerator = 0.2
+
+        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
         return command
-
-    

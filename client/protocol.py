@@ -10,7 +10,6 @@ import enum
 import logging
 import socket
 
-
 from client.car import Actuator, Sensor
 from client.driver import Driver 
 
@@ -25,6 +24,7 @@ TO_SOCKET_MSEC = TO_SOCKET_SEC * 1000
 
 RNG_FNDR_ANGLES = [-90, -75, -60, -45, -30, -20, -15, -10, -5, 0, 5, 10, 15, 20, 30, 45, 60, 75, 90]
 
+
 class State(enum.Enum):
     """ Enumeration representing the current state of the connection
 
@@ -37,6 +37,7 @@ class State(enum.Enum):
     STARTING = 2
     RUNNING = 3
     STOPPING = 4
+
 
 class Client:
     """ Client for TORCS racing car simulation with SCRC network server.
@@ -61,14 +62,11 @@ class Client:
         if self.state is State.STOPPED:
             self._start()
 
-        self.driver.init()
-
         while self.state is State.RUNNING:
             self._process()
 
         _logger.info('[Client] Execution stopped.')
         self.state = State.STOPPED
-
 
     def _start(self):
         _logger.info('[Client] \tInitializing connection...')
@@ -88,7 +86,6 @@ class Client:
         if self.state is State.RUNNING:
             _logger.info('[Client] \tDisconnecting from server...')
             self.state = State.STOPPING
-
 
     def _process(self):
         try:
