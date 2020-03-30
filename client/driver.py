@@ -11,8 +11,6 @@ from client.car import Actuator, Sensor
 
 # Global variables
 EX_GLOBAL_VAR = 0   # Example global variable
-BANG_BANG_TRN = 0.2
-
 
 class Driver:
     """ Car driving logic
@@ -52,17 +50,42 @@ class Driver:
 
         """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
-        # Simple Bang-Bang controller
-        if sensor.distance_from_center < 0:
-            command.steering = BANG_BANG_TRN
-        elif sensor.distance_from_center > 0:
-            command.steering = -1 * BANG_BANG_TRN
-        else:
-            command.steering = 0
+        # Example access of class variables
+        ex_var = self.ex_class_var
 
-        command.gear = 1
+        # Simple code to drive the car straight
+        command.steering = 0
+        command.gear = self.select_gear(sensor.gear, sensor.rpm)
         command.accelerator = 0.2
 
         """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
         return command
+
+    @staticmethod
+    def select_gear(current_gear, rpm):
+        """ Simple gear shifting algorithm. Feel free to adjust this as you see
+            fit.
+
+            Args:
+                current_gear    - The current gear the car is in
+                rpm             - The current RPM of the motor
+
+            Returns: Which gear to shift to
+        """
+        rpm_max = 6000
+        rpm_min = 3000
+        gear_max = 6
+
+        gear = current_gear
+        if rpm > rpm_max:
+            gear = gear + 1
+        elif rpm < rpm_min:
+            gear = gear - 1
+
+        if gear < 1:
+            gear = 1
+        elif gear > gear_max:
+            gear = gear_max
+
+        return gear
