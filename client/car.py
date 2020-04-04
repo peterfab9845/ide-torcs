@@ -52,9 +52,11 @@ class Sensor(Value):
         speed_x                 - Speed in X (forward) direction, ]-inf;inf[, m/s.
         speed_y                 - Speed in Y (left) direction, ]-inf;inf[, m/s.
         speed_z                 - Speed in Z (up) direction, ]-inf;inf[, m/s.
+        distances_from_edge     - 
         distance_from_center    - Normalized distance from track center, -1: right edge, 0: center, 1: left edge, [-1;1].
         wheel_velocities        - Four wheels' velocity, [0;inf[, deg/s.
         z                       - Distance of car center of mass to track surface, ]-inf;inf[, m.
+        focused_distances_from_edge - 
     """
 
     def __init__(self, sensor_dict):
