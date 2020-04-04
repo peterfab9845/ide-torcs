@@ -54,9 +54,10 @@ class Driver:
         ex_var = self.ex_class_var
 
         # Simple code to drive the car straight
-        command.steering = 0
+        command.steering = 2*sensor.angle/180 - (0.2*sensor.distance_from_center)
         command.gear = self.select_gear(sensor.gear, sensor.rpm)
-        command.accelerator = 0.2
+        command.accelerator = 1 - abs(sensor.angle/180) - abs(sensor.speed_x) / 150
+        command.brake = 3*abs(sensor.angle/180) - 0.1
 
         """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
