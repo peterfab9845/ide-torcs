@@ -16,8 +16,7 @@ def main():
     """Main entry point of application."""
     parser = argparse.ArgumentParser(description='Client for TORCS racing car simulation')
     parser.add_argument('--hostname', help='Server host name.', default='localhost')
-    parser.add_argument('--port', help='Port to connect, 3001 - 3010 for clients 1 - 10.',
-                        type=int, default=3001)
+    parser.add_argument('--port', help='Port to connect, 3001 - 3010 for clients 1 - 10.', type=int, default=3001)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)7s %(name)s %(message)s")
