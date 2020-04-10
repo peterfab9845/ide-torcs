@@ -13,11 +13,12 @@ plt.rcdefaults()
 
 import numpy as np
 import multiprocessing
+import collections
 
 
 class Graph:
 
-    def __init__(self, labels=(), xmin=0, xmax=100, ymin=0, ymax=100, title='', hbar=False):
+    def __init__(self, labels=(), xmin=0, xmax=100, ymin=0, ymax=100, title='', hbar=False, time=False):
         """ Initialize graph.
 
             Args:
@@ -28,13 +29,14 @@ class Graph:
                 ymax    - Upper bound of y axis. Default 100.
                 title   - Title of the plot. Default empty.
                 hbar    - Is plot type hbar? Default False.
+                time    - Is plot type time? Default False.
         """
 
         # Initialize queue & queue proc
         self.data_queue = multiprocessing.Queue()
         self.queue_proc = multiprocessing.Process(
             target=self.draw_plot,
-            args=(self.data_queue, labels, xmin, xmax, ymin, ymax, title, hbar)
+            args=(self.data_queue, labels, xmin, xmax, ymin, ymax, title, hbar, time)
         )
         self.queue_proc.start()
 
@@ -46,7 +48,7 @@ class Graph:
         self.data_queue.put(data)
 
     @staticmethod
-    def draw_plot(queue, labels=(), xmin=0, xmax=100, ymin=0, ymax=100, title='', hbar=False):
+    def draw_plot(queue, labels=(), xmin=0, xmax=100, ymin=0, ymax=100, title='', hbar=False, time=False):
         """ Refreshes the plot.
 
             Args
@@ -57,18 +59,25 @@ class Graph:
         plt.xlim(xmin, xmax)
         plt.ylim(ymin, ymax)
 
-        if labels:
-            objects = labels
+        # For historical graphs
+        if time:
+            # Create the history of length xmax
+            history = collections.deque([0] * xmax, xmax)
+
         else:
-            objects = tuple(range(0, 19))  # TODO: How to pass in different values?
+            if labels:
+                objects = labels
+            else:
+                objects = tuple(range(0, 19))  # TODO: How to pass in different values?
 
-        # Evenly space the bars according to how many there are
-        x_pos = np.arange(len(objects))
-        # bars of bar graph...
-        data_to_plot = range(0, len(objects))
+            # Evenly space the bars according to how many there are
+            x_pos = np.arange(len(objects))
+            # bars of bar graph...
+            data_to_plot = range(0, len(objects))
 
-        # What and where to label the graph
-        plt.xticks(x_pos, objects)
+            # What and where to label the graph
+            plt.xticks(x_pos, objects)
+
 
         # Add title to plot
         plt.title(title)
@@ -83,6 +92,8 @@ class Graph:
             while not queue.empty():
                 # Fetch item from the queue and store it locally.
                 data_to_plot = queue.get()
+                if time:
+                    history.append(data_to_plot)
 
             # Clear the axis
             plt.cla()
@@ -96,6 +107,9 @@ class Graph:
                 # What and where to label the graph
                 plt.xlim(xmin, xmax)
                 plt.yticks(x_pos, objects)
+            elif time:
+                plt.plot(history)
+                plt.ylim(ymin, ymax)
             else:
                 plt.bar(x_pos, data_to_plot, align='center')
                 plt.ylim(ymin, ymax)
