@@ -9,7 +9,6 @@
 from client.car import Actuator, Sensor
 from client.graph import Graph
 
-
 # Global variables
 track_angle_turn = 0
 offset_turn = 0
@@ -34,9 +33,12 @@ class Driver:
         """ If you need to initialize any variables, do it here and remove the
             'pass' statement.
         """
+        # to hold previous control value
+        self.control = 0
+        self.error = 0
 
         # Define class variables here
-        self.ex_class_var = 0   # Example class variables
+        self.ex_class_var = 0  # Example class variables
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -62,8 +64,22 @@ class Driver:
 
         command = Actuator()
 
-        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
+        # want to flip the sign for steering command
+        Kp = .5
+        Ki = .3
+        curr_err = sensor.distance_from_center
+        integral = self.control + (Ki*((curr_err + self.error)/2))
+        proportion = Kp*(curr_err - self.error)
+        self.control = (integral + proportion) * -1
+        self.error = curr_err
 
+        # constant 57kmph
+        if sensor.speed_x < 14:
+            accel = .5
+        else:
+            accel = 0
+        """ REPLACE ALL CODE BETWEEN THESE COMMENTS 
+        
         # Example access of class variables
         ex_var = self.ex_class_var
 
@@ -85,8 +101,10 @@ class Driver:
         #   PID_params = [p_term, i_term, d_term]
         #   self.pid_graph.add(PID_params)
 
-        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
-
+        REPLACE ALL CODE BETWEEN THESE COMMENTS """
+        command.steering = self.control
+        command.accelerator = accel
+        command.gear = self.select_gear(sensor, command)
         return command
 
     def select_gear(self, sensor, command):
