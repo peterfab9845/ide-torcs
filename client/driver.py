@@ -9,9 +9,6 @@
 from client.car import Actuator, Sensor
 from client.graph import Graph
 
-from matplotlib import pyplot
-import collections
-
 # Global variables
 track_angle_turn = 0
 offset_turn = 0
@@ -48,14 +45,7 @@ class Driver:
         self.steer_graph = Graph(labels=("Current Steering", "Distance from Center", "Angle from Track"),
                                  xmin=-1, xmax=1, title='Steering', hbar=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
-
-        # Live Distance to Center
-        pyplot.ion()
-        self.fig = pyplot.figure()
-        ax = self.fig.add_subplot(1, 1, 1)
-        ax.set_ylim(-2,2)
-        self.dists = collections.deque([0] * 200, 200)
-        self.line, = ax.plot(self.dists)
+        self.dist_graph = Graph(title="Distance from Center", ymin=-2, ymax=2, xmax=500, time=True)
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -89,10 +79,7 @@ class Driver:
         #   PID_params = [p_term, i_term, d_term]
         #   self.pid_graph.add(PID_params)
 
-        self.dists.append(sensor.distance_from_center)
-        self.line.set_ydata(self.dists)
-        self.fig.canvas.flush_events()
-
+        self.dist_graph.add(sensor.distance_from_center)
 
         """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
