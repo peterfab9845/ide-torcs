@@ -9,6 +9,8 @@
 from client.car import Actuator, Sensor
 from client.graph import Graph
 
+from matplotlib import pyplot
+import collections
 
 # Global variables
 track_angle_turn = 0
@@ -35,9 +37,6 @@ class Driver:
             'pass' statement.
         """
 
-        # Define class variables here
-        self.ex_class_var = 0   # Example class variables
-
         # Shifting Parameters
         self.rpm_max = 8500
         self.rpm_min = 4500
@@ -49,6 +48,14 @@ class Driver:
         self.steer_graph = Graph(labels=("Current Steering", "Distance from Center", "Angle from Track"),
                                  xmin=-1, xmax=1, title='Steering', hbar=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
+
+        # Live Distance to Center
+        pyplot.ion()
+        self.fig = pyplot.figure()
+        ax = self.fig.add_subplot(1, 1, 1)
+        ax.set_ylim(-2,2)
+        self.dists = collections.deque([0] * 200, 200)
+        self.line, = ax.plot(self.dists)
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -63,9 +70,6 @@ class Driver:
         command = Actuator()
 
         """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
-
-        # Example access of class variables
-        ex_var = self.ex_class_var
 
         command.steering = 2*sensor.angle/180 - (0.2*sensor.distance_from_center)
         command.gear = self.select_gear(sensor, command)
@@ -84,6 +88,11 @@ class Driver:
         # It may be useful to see what each term in PID is contributing so you could graph:
         #   PID_params = [p_term, i_term, d_term]
         #   self.pid_graph.add(PID_params)
+
+        self.dists.append(sensor.distance_from_center)
+        self.line.set_ydata(self.dists)
+        self.fig.canvas.flush_events()
+
 
         """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
 
