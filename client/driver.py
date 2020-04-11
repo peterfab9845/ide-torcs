@@ -34,11 +34,11 @@ class Driver:
             'pass' statement.
         """
         # to hold previous control value
-        self.control = 0
-        self.error = 0
+
 
         # Define class variables here
         self.ex_class_var = 0  # Example class variables
+        self.dist_from_center = 0
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -65,44 +65,21 @@ class Driver:
         command = Actuator()
 
         # want to flip the sign for steering command
-        Kp = .5
-        Ki = .3
-        curr_err = sensor.distance_from_center
-        integral = self.control + (Ki*((curr_err + self.error)/2))
-        proportion = Kp*(curr_err - self.error)
-        self.control = (integral + proportion) * -1
-        self.error = curr_err
+        Kp = -.5
+        Ka = 4
+
+        dist_derv = (sensor.distance_from_center - self.dist_from_center) * -25
+        self.dist_from_center = sensor.distance_from_center
+
+        dfc = Kp*(sensor.distance_from_center)
+        angle = (sensor.angle/180) * Ka
+        command.steering = dfc + angle + dist_derv
 
         # constant 57kmph
-        if sensor.speed_x < 14:
+        if sensor.speed_x < 18:
             accel = .5
         else:
             accel = 0
-        """ REPLACE ALL CODE BETWEEN THESE COMMENTS 
-        
-        # Example access of class variables
-        ex_var = self.ex_class_var
-
-        command.steering = 2*sensor.angle/180 - (0.2*sensor.distance_from_center)
-        command.gear = self.select_gear(sensor, command)
-        command.accelerator = 1 - abs(sensor.angle/180) - abs(sensor.speed_x) / 150
-        command.brake = 3*abs(sensor.angle/180) - 0.1
-
-        # Plot the camera and steering data
-        self.cam_graph.add(sensor.distances_from_edge)
-        self.steer_graph.add([command.steering, sensor.distance_from_center, sensor.angle])
-
-        # Plotting Notes: add() takes an array
-        #   ex.
-        #       data = [item1, item2, item3]
-        #       self.graph_name.add(data)
-        #
-        # It may be useful to see what each term in PID is contributing so you could graph:
-        #   PID_params = [p_term, i_term, d_term]
-        #   self.pid_graph.add(PID_params)
-
-        REPLACE ALL CODE BETWEEN THESE COMMENTS """
-        command.steering = self.control
         command.accelerator = accel
         command.gear = self.select_gear(sensor, command)
         return command
