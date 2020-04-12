@@ -9,6 +9,7 @@
 from client.car import Actuator, Sensor
 from client.graph import Graph
 
+
 # Global variables
 track_angle_turn = 0
 offset_turn = 0
@@ -51,6 +52,7 @@ class Driver:
         self.steer_graph = Graph(labels=("Current Steering", "Distance from Center", "Angle from Track"),
                                  xmin=-1, xmax=1, title='Steering', hbar=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
+        self.dist_graph = Graph(title="Distance from Center", ymin=-2, ymax=2, xmax=500, time=True)
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -85,6 +87,24 @@ class Driver:
             accel = 0
         command.accelerator = accel
         command.gear = self.select_gear(sensor, command)
+
+        # Plot the camera and steering data
+        self.cam_graph.add(sensor.distances_from_edge)
+        self.steer_graph.add([command.steering, sensor.distance_from_center, sensor.angle])
+
+        # Plotting Notes: add() takes an array
+        #   ex.
+        #       data = [item1, item2, item3]
+        #       self.graph_name.add(data)
+        #
+        # It may be useful to see what each term in PID is contributing so you could graph:
+        #   PID_params = [p_term, i_term, d_term]
+        #   self.pid_graph.add(PID_params)
+
+        self.dist_graph.add(sensor.distance_from_center)
+
+        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
+
         return command
 
     def select_gear(self, sensor, command):
