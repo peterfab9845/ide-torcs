@@ -64,8 +64,11 @@ class Driver:
 
         command = Actuator()
 
-        # want to flip the sign for steering command
+        #  want to flip the sign for steering command
+        # .5 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
         Kp = -.5
+        # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
+        # dominant factor in steering
         Ka = 4
 
         dist_derv = (sensor.distance_from_center - self.dist_from_center) * -25
@@ -75,7 +78,7 @@ class Driver:
         angle = (sensor.angle/180) * Ka
         command.steering = dfc + angle + dist_derv
 
-        # constant 57kmph
+        # constant 57kmph, might be 64 i forgot
         if sensor.speed_x < 18:
             accel = .5
         else:
