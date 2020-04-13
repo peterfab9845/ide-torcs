@@ -8,13 +8,9 @@
 """
 from client.car import Actuator, Sensor
 from client.graph import Graph
+import collections
 
-
-# Global variables
-track_angle_turn = 0
-offset_turn = 0
-corner_turn = 0
-
+MPS_PER_KMH = 1000 / 3600
 
 class Driver:
     """ Car driving logic
@@ -34,12 +30,12 @@ class Driver:
         """ If you need to initialize any variables, do it here and remove the
             'pass' statement.
         """
-        # to hold previous control value
 
-
-        # Define class variables here
-        self.ex_class_var = 0  # Example class variables
-        self.dist_from_center = 0
+        # Previous sensor values
+        self.old_dist_from_center = 0
+        self.speed_err_int = 0
+        self.old_speed_err = 0
+        self.old_center_diffs = collections.deque([0] * 10, 10)
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -52,7 +48,8 @@ class Driver:
         self.steer_graph = Graph(labels=("Current Steering", "Distance from Center", "Angle from Track"),
                                  xmin=-1, xmax=1, title='Steering', hbar=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
-        self.dist_graph = Graph(title="Distance from Center", ymin=-2, ymax=2, xmax=500, time=True)
+        self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=250, xmax=700, time=True, labels=("Actual", "Desired"))
+        self.accel_graph = Graph(title="Accelerator Control", ymin=-0.4, ymax=1.1, xmax=700, time=True, labels=("Overall", "P", "I", "Brake"))
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -66,44 +63,87 @@ class Driver:
 
         command = Actuator()
 
-        #  want to flip the sign for steering command
+        # Determine the shape of the track
+        center_pos = 0
+        for i, v in enumerate(sensor.distances_from_edge):
+            center_pos += i*v
+        center_pos /= sum(sensor.distances_from_edge)
+        # adjust for angle of car
+        angle_correction = 50*sensor.angle/180
+        center_pos_corrected = center_pos + angle_correction
+        center_diff = 9 - center_pos_corrected
+
+        """ Steering Control """
+
+        # want to flip the sign for steering command
         # .5 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
-        Kp = -.5
+        Kp_steer = -.5
+
         # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
         # dominant factor in steering
-        Ka = 4
+        Ka_steer = 4
 
-        dist_derv = (sensor.distance_from_center - self.dist_from_center) * -25
-        self.dist_from_center = sensor.distance_from_center
+        # derivative term starts out really tiny, so we need a big multiplier (also negative)
+        Kd_steer = -25
 
-        dfc = Kp*(sensor.distance_from_center)
-        angle = (sensor.angle/180) * Ka
-        command.steering = dfc + angle + dist_derv
+        dist = Kp_steer*(sensor.distance_from_center)
+        angle = (sensor.angle/180) * Ka_steer
+        dist_derv = (sensor.distance_from_center - self.old_dist_from_center) * Kd_steer
 
-        # constant 57kmph, might be 64 i forgot
-        if sensor.speed_x < 18:
-            accel = .5
-        else:
-            accel = 0
-        command.accelerator = accel
+        command.steering = dist + angle + dist_derv
+
+        """ Accelerator Control """
+
+        # control speed based on how curved the track is
+        
+        #speed_des = 150 * MPS_PER_KMH
+        speed_des = 60 * MPS_PER_KMH
+
+        if max(sensor.distances_from_edge) < 60:
+            speed_des = 60 * MPS_PER_KMH
+
+        # don't try to zoom if off the track
+        if abs(sensor.distance_from_center) > 1 or abs(sensor.angle) > 90:
+            speed_des = MPS_PER_KMH * 20
+
+        # PI control
+        speed_err = speed_des - sensor.speed_x
+
+        # P
+        Kp_accel = 0.8
+        accel_p = Kp_accel * speed_err
+
+        # I
+        self.speed_err_int = min(max(self.speed_err_int, -50), 50)
+        self.speed_err_int += speed_err
+
+        Ki_accel = 0.02
+        accel_i = Ki_accel * (self.speed_err_int)
+
+        # combine terms
+        command.accelerator = accel_p + accel_i
+
+        if command.accelerator < 0:
+            command.brake = -command.accelerator - 0.4
+
+        command.accelerator = min(max(command.accelerator, 0), 1)
+        command.brake = min(max(command.brake, 0), 1)
+
+        """ Graphs and misc """
+
+        # Select the gear
         command.gear = self.select_gear(sensor, command)
 
-        # Plot the camera and steering data
+        # Update "old" values
+        self.old_speed_err = speed_err
+        self.old_center_diffs.append(center_diff)
+        self.old_dist_from_center = sensor.distance_from_center
+
+        # Plot the sensor and control data
         self.cam_graph.add(sensor.distances_from_edge)
         self.steer_graph.add([command.steering, sensor.distance_from_center, sensor.angle])
-
-        # Plotting Notes: add() takes an array
-        #   ex.
-        #       data = [item1, item2, item3]
-        #       self.graph_name.add(data)
-        #
-        # It may be useful to see what each term in PID is contributing so you could graph:
-        #   PID_params = [p_term, i_term, d_term]
-        #   self.pid_graph.add(PID_params)
-
-        self.dist_graph.add(sensor.distance_from_center)
-
-        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
+        self.speed_graph.add([sensor.speed_x / MPS_PER_KMH, speed_des / MPS_PER_KMH])
+        self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
 
         return command
 
@@ -121,7 +161,9 @@ class Driver:
         gear = sensor.gear
         d_since_shift = sensor.distance_raced - self.gear_change_d
 
-        if d_since_shift < 10:
+        if abs(sensor.distance_from_center) > 1 or abs(sensor.angle) > 90:
+            gear = 1
+        elif d_since_shift < 10:
             # Don't shift if we just did.
             # Should probably be time based, but distance is easier
             pass
