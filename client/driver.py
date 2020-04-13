@@ -36,6 +36,7 @@ class Driver:
         self.speed_err_int = 0
         self.old_speed_err = 0
         self.old_center_diffs = collections.deque([0] * 10, 10)
+        self.old_max_distances_from_edge = collections.deque([0] * 40, 40)
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -68,10 +69,7 @@ class Driver:
         for i, v in enumerate(sensor.distances_from_edge):
             center_pos += i*v
         center_pos /= sum(sensor.distances_from_edge)
-        # adjust for angle of car
-        angle_correction = 50*sensor.angle/180
-        center_pos_corrected = center_pos + angle_correction
-        center_diff = 9 - center_pos_corrected
+        center_diff = 9 - center_pos
 
         """ Steering Control """
 
@@ -90,17 +88,18 @@ class Driver:
         angle = (sensor.angle/180) * Ka_steer
         dist_derv = (sensor.distance_from_center - self.old_dist_from_center) * Kd_steer
 
-        command.steering = dist + angle + dist_derv
+        command.steering = dist + angle + dist_derv + 0.2*(center_diff + sum(self.old_center_diffs))/11
 
         """ Accelerator Control """
 
         # control speed based on how curved the track is
         
-        #speed_des = 150 * MPS_PER_KMH
-        speed_des = 60 * MPS_PER_KMH
+        speed_des = 150 * MPS_PER_KMH
+        speed_des = MPS_PER_KMH * 1.5 * (max(sensor.distances_from_edge) + sum(self.old_max_distances_from_edge))/41
+        #speed_des = 60 * MPS_PER_KMH
 
-        if max(sensor.distances_from_edge) < 60:
-            speed_des = 60 * MPS_PER_KMH
+        #if max(sensor.distances_from_edge) < 60:
+        #    speed_des = 60 * MPS_PER_KMH
 
         # don't try to zoom if off the track
         if abs(sensor.distance_from_center) > 1 or abs(sensor.angle) > 90:
@@ -124,7 +123,7 @@ class Driver:
         command.accelerator = accel_p + accel_i
 
         if command.accelerator < 0:
-            command.brake = -command.accelerator - 0.4
+            command.brake = -command.accelerator - 0.5
 
         command.accelerator = min(max(command.accelerator, 0), 1)
         command.brake = min(max(command.brake, 0), 1)
@@ -138,6 +137,7 @@ class Driver:
         self.old_speed_err = speed_err
         self.old_center_diffs.append(center_diff)
         self.old_dist_from_center = sensor.distance_from_center
+        self.old_max_distances_from_edge.append(max(sensor.distances_from_edge))
 
         # Plot the sensor and control data
         self.cam_graph.add(sensor.distances_from_edge)
