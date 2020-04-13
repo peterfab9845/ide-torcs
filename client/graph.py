@@ -61,9 +61,10 @@ class Graph:
 
         # For historical graphs
         if time:
-            # Create the history of length xmax
-            history = collections.deque([0] * xmax, xmax)
+            # Create the histories of length xmax
+            history = [collections.deque([None] * xmax, xmax) for _ in range(max(len(labels), 1))]
 
+        # For bar graphs
         else:
             if labels:
                 objects = labels
@@ -93,7 +94,11 @@ class Graph:
                 # Fetch item from the queue and store it locally.
                 data_to_plot = queue.get()
                 if time:
-                    history.append(data_to_plot)
+                    if labels:
+                        for i in range(len(labels)):
+                            history[i].append(data_to_plot[i])
+                    else:
+                        history[0].append(data_to_plot)
 
             # Clear the axis
             plt.cla()
@@ -108,8 +113,11 @@ class Graph:
                 plt.xlim(xmin, xmax)
                 plt.yticks(x_pos, objects)
             elif time:
-                plt.plot(history)
+                for h in history:
+                    plt.plot(h)
                 plt.ylim(ymin, ymax)
+                if labels:
+                    plt.legend(labels)
             else:
                 plt.bar(x_pos, data_to_plot, align='center')
                 plt.ylim(ymin, ymax)
