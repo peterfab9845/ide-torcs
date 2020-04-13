@@ -9,6 +9,7 @@
 from client.car import Actuator, Sensor
 from client.graph import Graph
 
+
 # Global variables
 track_angle_turn = 0
 offset_turn = 0
@@ -33,6 +34,12 @@ class Driver:
         """ If you need to initialize any variables, do it here and remove the
             'pass' statement.
         """
+        # to hold previous control value
+
+
+        # Define class variables here
+        self.ex_class_var = 0  # Example class variables
+        self.dist_from_center = 0
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -59,12 +66,27 @@ class Driver:
 
         command = Actuator()
 
-        """ REPLACE ALL CODE BETWEEN THESE COMMENTS """
+        #  want to flip the sign for steering command
+        # .5 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
+        Kp = -.5
+        # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
+        # dominant factor in steering
+        Ka = 4
 
-        command.steering = 2*sensor.angle/180 - (0.2*sensor.distance_from_center)
+        dist_derv = (sensor.distance_from_center - self.dist_from_center) * -25
+        self.dist_from_center = sensor.distance_from_center
+
+        dfc = Kp*(sensor.distance_from_center)
+        angle = (sensor.angle/180) * Ka
+        command.steering = dfc + angle + dist_derv
+
+        # constant 57kmph, might be 64 i forgot
+        if sensor.speed_x < 18:
+            accel = .5
+        else:
+            accel = 0
+        command.accelerator = accel
         command.gear = self.select_gear(sensor, command)
-        command.accelerator = 1 - abs(sensor.angle/180) - abs(sensor.speed_x) / 150
-        command.brake = 3*abs(sensor.angle/180) - 0.1
 
         # Plot the camera and steering data
         self.cam_graph.add(sensor.distances_from_edge)
