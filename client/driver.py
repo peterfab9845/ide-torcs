@@ -32,11 +32,12 @@ class Driver:
         """
 
         # Previous sensor values
-        self.old_dist_from_center = 0
+        self.old_dist_from_desired = 0
         self.speed_err_int = 0
         self.old_speed_err = 0
-        self.old_center_diffs = collections.deque([0] * 10, 10)
         self.old_max_distances_from_edge = collections.deque([0] * 40, 40)
+        self.old_edge_indices = collections.deque([9] * 20, 20)
+        self.old_sensor_area = collections.deque([0] * 20, 20)
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -46,11 +47,13 @@ class Driver:
         self.gear_last = 0
 
         # Graph Parameters
-        self.steer_graph = Graph(labels=("Current Steering", "Distance from Center", "Angle from Track"),
-                                 xmin=-1, xmax=1, title='Steering', hbar=True)
+        self.steer_graph = Graph(title="Steering", labels=("Overall", "Location", "dLocation", "Angle"),
+                                 ymin=-1, ymax=1, xmax=700, time=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
-        self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=250, xmax=700, time=True, labels=("Actual", "Desired"))
+        self.cam_graph2 = Graph(title="Edge Position", ymin=0, ymax=18, xmax=700, time=True)
+        self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True, labels=("Actual", "Desired"))
         self.accel_graph = Graph(title="Accelerator Control", ymin=-0.4, ymax=1.1, xmax=700, time=True, labels=("Overall", "P", "I", "Brake"))
+        self.area_graph = Graph(title="Sensor Area", ymin=0, ymax=1000, xmax=700, time=True)
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -65,45 +68,46 @@ class Driver:
         command = Actuator()
 
         # Determine the shape of the track
-        center_pos = 0
-        for i, v in enumerate(sensor.distances_from_edge):
-            center_pos += i*v
-        center_pos /= sum(sensor.distances_from_edge)
-        center_diff = 9 - center_pos
+        # edge detection
+        edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
+        edge_pos = edge_index
+        #for i, v in enumerate(self.old_edge_indices):
+        #    edge_pos += 0.5*v
+        #edge_pos /= 1 + 0.5*len(self.old_edge_indices)
+        desired_distance_from_center = 0.5 * (9 - edge_pos)
+        distance_from_desired = sensor.distance_from_center - desired_distance_from_center
+
 
         """ Steering Control """
 
         # want to flip the sign for steering command
         # .5 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
-        Kp_steer = -.5
+        Kp_steer = -.3
 
         # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
         # dominant factor in steering
-        Ka_steer = 4
+        Ka_steer = 3
 
         # derivative term starts out really tiny, so we need a big multiplier (also negative)
-        Kd_steer = -25
+        Kd_steer = 0.1
 
-        dist = Kp_steer*(sensor.distance_from_center)
+        dist = Kp_steer*(distance_from_desired)
         angle = (sensor.angle/180) * Ka_steer
-        dist_derv = (sensor.distance_from_center - self.old_dist_from_center) * Kd_steer
+        dist_derv = (distance_from_desired - self.old_dist_from_desired) * Kd_steer
 
-        command.steering = dist + angle + dist_derv + 0.2*(center_diff + sum(self.old_center_diffs))/11
+        command.steering = dist + angle + dist_derv
 
         """ Accelerator Control """
 
         # control speed based on how curved the track is
         
-        speed_des = 150 * MPS_PER_KMH
-        speed_des = MPS_PER_KMH * 1.5 * (max(sensor.distances_from_edge) + sum(self.old_max_distances_from_edge))/41
-        #speed_des = 60 * MPS_PER_KMH
+        speed_des = 60 * MPS_PER_KMH
+        speed_des += 0.2 * (max(sensor.distances_from_edge) + sum(self.old_max_distances_from_edge))/41
+
+        #speed_des = 200 * MPS_PER_KMH * (sum(sensor.distances_from_edge) + sum(self.old_sensor_area))/(1 + len(self.old_sensor_area))/500
 
         #if max(sensor.distances_from_edge) < 60:
         #    speed_des = 60 * MPS_PER_KMH
-
-        # don't try to zoom if off the track
-        if abs(sensor.distance_from_center) > 1 or abs(sensor.angle) > 90:
-            speed_des = MPS_PER_KMH * 20
 
         # PI control
         speed_err = speed_des - sensor.speed_x
@@ -125,6 +129,10 @@ class Driver:
         if command.accelerator < 0:
             command.brake = -command.accelerator - 0.5
 
+        # don't try to zoom if off the track
+        if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 90:
+            command.accelerator = 0.2
+
         command.accelerator = min(max(command.accelerator, 0), 1)
         command.brake = min(max(command.brake, 0), 1)
 
@@ -135,15 +143,18 @@ class Driver:
 
         # Update "old" values
         self.old_speed_err = speed_err
-        self.old_center_diffs.append(center_diff)
-        self.old_dist_from_center = sensor.distance_from_center
+        self.old_dist_from_desired = distance_from_desired
         self.old_max_distances_from_edge.append(max(sensor.distances_from_edge))
+        self.old_edge_indices.append(edge_index)
+        self.old_sensor_area.append(sum(sensor.distances_from_edge))
 
         # Plot the sensor and control data
         self.cam_graph.add(sensor.distances_from_edge)
-        self.steer_graph.add([command.steering, sensor.distance_from_center, sensor.angle])
+        self.cam_graph2.add(edge_pos)
+        self.steer_graph.add([command.steering, dist, dist_derv, angle])
         self.speed_graph.add([sensor.speed_x / MPS_PER_KMH, speed_des / MPS_PER_KMH])
         self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
+        self.area_graph.add(sum(sensor.distances_from_edge))
 
         return command
 
@@ -161,9 +172,7 @@ class Driver:
         gear = sensor.gear
         d_since_shift = sensor.distance_raced - self.gear_change_d
 
-        if abs(sensor.distance_from_center) > 1 or abs(sensor.angle) > 90:
-            gear = 1
-        elif d_since_shift < 10:
+        if d_since_shift < 10:
             # Don't shift if we just did.
             # Should probably be time based, but distance is easier
             pass
