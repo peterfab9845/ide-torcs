@@ -63,6 +63,12 @@ class Driver:
 
         command = Actuator()
 
+        # Using the clutch helps at the start of the race (added in car.py)
+        if sensor.distance_raced < 3:
+            command.clutch = 0.8 - 0.3*sensor.distance_raced
+        else:
+            command.clutch = 0
+
         # Determine the shape of the track
         center_pos = 0
         for i, v in enumerate(sensor.distances_from_edge):
