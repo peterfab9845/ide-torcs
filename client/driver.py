@@ -73,6 +73,12 @@ class Driver:
         # Calculate distances in forward direction only
         dists_linear = [a*b for a, b in zip(sensor.distances_from_edge, LINEAR_TRANSFORM)]
 
+        # Using the clutch helps at the start of the race (added in car.py)
+        if sensor.distance_raced < 3:
+            command.clutch = 0.8 - 0.3*sensor.distance_raced
+        else:
+            command.clutch = 0
+
         # Determine the shape of the track
         # edge detection
         edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
