@@ -9,8 +9,10 @@
 from client.car import Actuator, Sensor
 from client.graph import Graph
 import collections
+import numpy as np
 
 MPS_PER_KMH = 1000 / 3600
+LINEAR_TRANSFORM = np.cos(np.linspace(-np.pi/2, np.pi/2, 19))
 
 class Driver:
     """ Car driving logic
@@ -50,6 +52,7 @@ class Driver:
         self.steer_graph = Graph(title="Steering", labels=("Overall", "Location", "dLocation", "Angle"),
                                  ymin=-1, ymax=1, xmax=700, time=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
+        self.cam_graph_linear = Graph(title="Linear Sensors", ymin=0, ymax=200)
         self.cam_graph2 = Graph(title="Edge Position", ymin=0, ymax=18, xmax=700, time=True)
         self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True, labels=("Actual", "Desired"))
         self.accel_graph = Graph(title="Accelerator Control", ymin=-0.4, ymax=1.1, xmax=700, time=True, labels=("Overall", "P", "I", "Brake"))
@@ -66,6 +69,9 @@ class Driver:
         """
 
         command = Actuator()
+
+        # Calculate distances in forward direction only
+        dists_linear = [a*b for a, b in zip(sensor.distances_from_edge, LINEAR_TRANSFORM)]
 
         # Determine the shape of the track
         # edge detection
@@ -150,6 +156,7 @@ class Driver:
 
         # Plot the sensor and control data
         self.cam_graph.add(sensor.distances_from_edge)
+        self.cam_graph_linear.add(np.multiply(LINEAR_TRANSFORM, sensor.distances_from_edge))
         self.cam_graph2.add(edge_pos)
         self.steer_graph.add([command.steering, dist, dist_derv, angle])
         self.speed_graph.add([sensor.speed_x / MPS_PER_KMH, speed_des / MPS_PER_KMH])
