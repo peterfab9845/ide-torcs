@@ -10,6 +10,10 @@ from client.car import Actuator, Sensor
 from client.graph import Graph
 import collections
 import numpy as np
+import time
+
+""" Change this to 1 to use the safer driving mode """
+SAFE_CAR = 0
 
 MPS_PER_KMH = 1000 / 3600
 WHEEL_RADIUS_M = 0.3276 # meters
@@ -38,10 +42,13 @@ class Driver:
         # Previous sensor values
         self.old_dist_from_center = 0
         self.center_dist_int = 0
+        self.old_steer = 0
+        self.old_speed_des = 300
+        self.old_accel = 1
         self.speed_err_int = 0
         self.old_speed_err = 0
-        self.old_forward_distances = collections.deque([0] * 5, 5)
-        self.old_edge_indices = collections.deque([9] * 20, 20)
+        self.forward_distances = collections.deque([0] * 7, 7)
+        self.edge_indices = collections.deque([9] * 25, 25)
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -54,6 +61,7 @@ class Driver:
         self.steer_graph = Graph(title="Steering", labels=("Overall", "Location", "iLocation", "dLocation", "Angle"),
                                  ymin=-1, ymax=1, xmax=700, time=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
+        self.edge_graph = Graph(title="Edge Location", ymin=0, ymax=18, xmax=700, time=True)
         self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True,
                                  labels=("Actual", "Desired"))
         self.accel_graph = Graph(title="Accelerator Control", ymin=-0.4, ymax=1.1, xmax=700, time=True,
@@ -69,6 +77,9 @@ class Driver:
             Returns: An Actuator populated with commands to send to the server
         """
 
+        # record times to see if we're taking too long
+        start_time = time.time()
+
         command = Actuator()
 
         # Using the clutch helps at the start of the race (added in car.py)
@@ -77,49 +88,49 @@ class Driver:
         else:
             command.clutch = 0
 
-        # Determine the shape of the track
-        # edge detection
-        #edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
-        #edge_pos = edge_index
-        #for i, v in enumerate(self.old_edge_indices):
-        #    edge_pos += 0.5*v
-        #edge_pos /= 1 + 0.5*len(self.old_edge_indices)
-        #desired_distance_from_center = 0.5 * (9 - edge_pos)
-        #distance_from_desired = sensor.distance_from_center - desired_distance_from_center
-
-
         """ Steering Control """
 
+        # Look for where the inside edge of the track is (at the furthest distance)
+        edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
+        # average because it jumps around a lot
+        self.edge_indices.append(edge_index)
+        edge_pos = np.mean(self.edge_indices)
+        desired_distance_from_center = 0.5 * (9 - edge_pos)
+
+        distance_from_desired = sensor.distance_from_center - desired_distance_from_center
+
         # want to flip the sign for steering command
-        # .4 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
-        Kp_steer = -.3
+        # this is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
+        Kp_steer = -.4
 
         # also use an integral term to stay away from the edge on turns
-        Ki_steer = -.02
+        Ki_steer = -.015
 
         # derivative term starts out really tiny, so we need a big multiplier (also negative)
-        Kd_steer = -5
+        Kd_steer = -6
 
         # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
         # dominant factor in steering
-        Ka_steer = 5
+        Ka_steer = 6
 
         self.center_dist_int = min(max(self.center_dist_int, -10), 10)
         if sensor.distance_raced > 30:
-            self.center_dist_int += sensor.distance_from_center
-        if sensor.distance_from_center * self.old_dist_from_center < 0:
+            self.center_dist_int += distance_from_desired
+        if distance_from_desired * self.old_dist_from_center < 0:
+            self.center_dist_int = 0
+        if abs(distance_from_desired) < 0.05:
             self.center_dist_int = 0
 
-        dist = Kp_steer*(sensor.distance_from_center)
+        dist = Kp_steer*(distance_from_desired)
         dist_int = Ki_steer*(self.center_dist_int)
-        dist_derv = Kd_steer*(sensor.distance_from_center - self.old_dist_from_center)
+        dist_derv = Kd_steer*(distance_from_desired - self.old_dist_from_center)
         angle = (sensor.angle/180) * Ka_steer
 
         command.steering = dist + dist_int + dist_derv + angle
 
         # don't turn as much when we're going fast
         if sensor.speed_x > 1: # avoid div by 0
-            steer_speed_coeff = 20 / sensor.speed_x
+            steer_speed_coeff = 8 / sensor.speed_x
             if steer_speed_coeff < 1:
                 command.steering *= steer_speed_coeff
 
@@ -127,12 +138,25 @@ class Driver:
 
         # control speed based on how curved the track is
         
-        middle_distances = np.mean(sensor.distances_from_edge[7:12])
-        average_forward_distance = (middle_distances + sum(self.old_forward_distances))/(1 + len(self.old_forward_distances))
-        speed_des = 2 * MPS_PER_KMH * average_forward_distance
+        middle_distances = (1*sensor.distances_from_edge[7]
+                          + 2*sensor.distances_from_edge[8]
+                          + 2*sensor.distances_from_edge[9]
+                          + 2*sensor.distances_from_edge[10]
+                          + 1*sensor.distances_from_edge[11])/8
+        self.forward_distances.append(middle_distances)
+        average_forward_distance = np.mean(self.forward_distances)
+        if SAFE_CAR:
+            speed_des = 1 * MPS_PER_KMH * average_forward_distance
+        else:
+            speed_des = 3 * MPS_PER_KMH * average_forward_distance
+
+        # make desired speed not jump up quickly - match the car's real acceleration
+        # not perfect for higher gears, but they aren't affected as much
+        if (speed_des - self.old_speed_des) > 0.15:
+            speed_des = self.old_speed_des + 0.15
 
         # don't try to zoom if off the track
-        if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 90:
+        if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 30:
             speed_des = 30 * MPS_PER_KMH
 
         # PI control
@@ -155,8 +179,9 @@ class Driver:
         # combine terms
         command.accelerator = accel_p + accel_i
 
-        if command.accelerator < 0:
-            command.brake = -command.accelerator - 0.4
+        # brake if we want to slow down fast
+        if command.accelerator + 0.35 < 0:
+            command.brake = 0.5*(-command.accelerator - 0.35)
 
         # avoid slipping and braking constantly when off the track
         if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 90:
@@ -173,15 +198,35 @@ class Driver:
 
         # Update "old" values
         self.old_speed_err = speed_err
-        self.old_dist_from_center = sensor.distance_from_center
-        self.old_forward_distances.append(middle_distances)
-        #self.old_edge_indices.append(edge_index)
+        self.old_speed_des = speed_des
+        self.old_accel = command.accelerator
+        self.old_steer = command.steering
+        #self.old_dist_from_center = sensor.distance_from_center
+        self.old_dist_from_center = distance_from_desired
 
         # Plot the sensor and control data
         self.cam_graph.add(sensor.distances_from_edge)
+        self.edge_graph.add(edge_pos)
         self.steer_graph.add([command.steering, dist, dist_int, dist_derv, angle])
         self.speed_graph.add([speed_average / MPS_PER_KMH, speed_des / MPS_PER_KMH])
         self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
+
+        # see how long we're taking
+        exec_time = time.time() - start_time
+        if exec_time > 0.01:
+            print("Too slow for 1x!")
+        elif exec_time > 0.005:
+            print("Too slow for 2x!")
+        elif exec_time > 0.0025:
+            print("Too slow for 4x!")
+        elif exec_time > 0.00125:
+            print("Too slow for 8x!")
+        elif exec_time > 0.000625:
+            print("Too slow for 16x!")
+        elif exec_time > 0.0003125:
+            print("Too slow for 32x!")
+        #elif exec_time > 0.00015625:
+        #    print("Too slow for 64x!")
 
         return command
 
@@ -208,10 +253,12 @@ class Driver:
             self.gear_last = gear
             gear = gear + 1
             self.gear_change_d = sensor.distance_raced
+            command.accelerator = 0 # this happens anyway, but we need to keep track of it
         elif rpm < self.rpm_min:
             self.gear_last = gear
             gear = gear - 1
             self.gear_change_d = sensor.distance_raced
+            command.accelerator = 0 # this happens anyway, but we need to keep track of it
 
         if gear < 1:
             gear = 1
