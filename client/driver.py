@@ -91,9 +91,12 @@ class Driver:
         """ Steering Control """
 
         # Look for where the inside edge of the track is (at the furthest distance)
-        edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
-        # average because it jumps around a lot
-        self.edge_indices.append(edge_index)
+        if sensor.distances_from_edge[0] == -1:
+            self.edge_indices.append(9)
+        else:
+            edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
+            # average because it jumps around a lot
+            self.edge_indices.append(edge_index)
         edge_pos = np.mean(self.edge_indices)
         desired_distance_from_center = 0.5 * (9 - edge_pos)
 
