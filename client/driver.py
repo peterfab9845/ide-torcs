@@ -12,7 +12,9 @@ import collections
 import numpy as np
 
 MPS_PER_KMH = 1000 / 3600
-LINEAR_TRANSFORM = np.cos(np.linspace(-np.pi/2, np.pi/2, 19))
+WHEEL_RADIUS_M = 0.3276 # meters
+# calculated from rear wheel parameters in share/games/torcs/cars/car1-trb1/car1-trb1.xml
+WHEEL_CIRCUM_M = 2 * np.pi * WHEEL_RADIUS_M # meters
 
 class Driver:
     """ Car driving logic
@@ -34,12 +36,12 @@ class Driver:
         """
 
         # Previous sensor values
-        self.old_dist_from_desired = 0
+        self.old_dist_from_center = 0
+        self.center_dist_int = 0
         self.speed_err_int = 0
         self.old_speed_err = 0
-        self.old_max_distances_from_edge = collections.deque([0] * 40, 40)
+        self.old_forward_distances = collections.deque([0] * 5, 5)
         self.old_edge_indices = collections.deque([9] * 20, 20)
-        self.old_sensor_area = collections.deque([0] * 20, 20)
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -49,14 +51,13 @@ class Driver:
         self.gear_last = 0
 
         # Graph Parameters
-        self.steer_graph = Graph(title="Steering", labels=("Overall", "Location", "dLocation", "Angle"),
+        self.steer_graph = Graph(title="Steering", labels=("Overall", "Location", "iLocation", "dLocation", "Angle"),
                                  ymin=-1, ymax=1, xmax=700, time=True)
         self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
-        self.cam_graph_linear = Graph(title="Linear Sensors", ymin=0, ymax=200)
-        self.cam_graph2 = Graph(title="Edge Position", ymin=0, ymax=18, xmax=700, time=True)
-        self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True, labels=("Actual", "Desired"))
-        self.accel_graph = Graph(title="Accelerator Control", ymin=-0.4, ymax=1.1, xmax=700, time=True, labels=("Overall", "P", "I", "Brake"))
-        self.area_graph = Graph(title="Sensor Area", ymin=0, ymax=1000, xmax=700, time=True)
+        self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True,
+                                 labels=("Actual", "Desired"))
+        self.accel_graph = Graph(title="Accelerator Control", ymin=-0.4, ymax=1.1, xmax=700, time=True,
+                                 labels=("Overall", "P", "I", "Brake"))
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -70,63 +71,78 @@ class Driver:
 
         command = Actuator()
 
-        # Calculate distances in forward direction only
-        dists_linear = [a*b for a, b in zip(sensor.distances_from_edge, LINEAR_TRANSFORM)]
-
         # Using the clutch helps at the start of the race (added in car.py)
-        if sensor.distance_raced < 3:
-            command.clutch = 0.8 - 0.3*sensor.distance_raced
+        if sensor.distance_raced < 20:
+            command.clutch = max(0.8 - 0.2*sensor.current_lap_time, 0)
         else:
             command.clutch = 0
 
         # Determine the shape of the track
         # edge detection
-        edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
-        edge_pos = edge_index
+        #edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
+        #edge_pos = edge_index
         #for i, v in enumerate(self.old_edge_indices):
         #    edge_pos += 0.5*v
         #edge_pos /= 1 + 0.5*len(self.old_edge_indices)
-        desired_distance_from_center = 0.5 * (9 - edge_pos)
-        distance_from_desired = sensor.distance_from_center - desired_distance_from_center
+        #desired_distance_from_center = 0.5 * (9 - edge_pos)
+        #distance_from_desired = sensor.distance_from_center - desired_distance_from_center
 
 
         """ Steering Control """
 
         # want to flip the sign for steering command
-        # .5 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
-        Kp_steer = -.5
+        # .4 is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
+        Kp_steer = -.3
+
+        # also use an integral term to stay away from the edge on turns
+        Ki_steer = -.02
+
+        # derivative term starts out really tiny, so we need a big multiplier (also negative)
+        Kd_steer = -5
 
         # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
         # dominant factor in steering
-        Ka_steer = 4
+        Ka_steer = 5
 
-        # derivative term starts out really tiny, so we need a big multiplier (also negative)
-        Kd_steer = -25
+        self.center_dist_int = min(max(self.center_dist_int, -10), 10)
+        if sensor.distance_raced > 30:
+            self.center_dist_int += sensor.distance_from_center
+        if sensor.distance_from_center * self.old_dist_from_center < 0:
+            self.center_dist_int = 0
 
         dist = Kp_steer*(sensor.distance_from_center)
+        dist_int = Ki_steer*(self.center_dist_int)
+        dist_derv = Kd_steer*(sensor.distance_from_center - self.old_dist_from_center)
         angle = (sensor.angle/180) * Ka_steer
-        dist_derv = (sensor.distance_from_center - self.old_dist_from_center) * Kd_steer
 
-        command.steering = dist + angle + dist_derv
+        command.steering = dist + dist_int + dist_derv + angle
+
+        # don't turn as much when we're going fast
+        if sensor.speed_x > 1: # avoid div by 0
+            steer_speed_coeff = 20 / sensor.speed_x
+            if steer_speed_coeff < 1:
+                command.steering *= steer_speed_coeff
 
         """ Accelerator Control """
 
         # control speed based on how curved the track is
         
-        #speed_des = 150 * MPS_PER_KMH
-        speed_des = 60 * MPS_PER_KMH
-        #speed_des += 0.2 * (max(sensor.distances_from_edge) + sum(self.old_max_distances_from_edge))/41
+        middle_distances = np.mean(sensor.distances_from_edge[7:12])
+        average_forward_distance = (middle_distances + sum(self.old_forward_distances))/(1 + len(self.old_forward_distances))
+        speed_des = 2 * MPS_PER_KMH * average_forward_distance
 
-        if max(sensor.distances_from_edge) < 60:
-            speed_des = 60 * MPS_PER_KMH
-        #speed_des = 200 * MPS_PER_KMH * (sum(sensor.distances_from_edge) + sum(self.old_sensor_area))/(1 + len(self.old_sensor_area))/500
-
+        # don't try to zoom if off the track
+        if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 90:
+            speed_des = 30 * MPS_PER_KMH
 
         # PI control
-        speed_err = speed_des - sensor.speed_x
+        speed_wheels = (sensor.wheel_velocities[2] + sensor.wheel_velocities[3])/2
+        speed_wheels = (speed_wheels / 360) * WHEEL_CIRCUM_M
+        speed_average = (speed_wheels + sensor.speed_x) / 2
+        speed_err = speed_des - speed_average
 
         # P
-        Kp_accel = 0.8
+        Kp_accel = 0.3
         accel_p = Kp_accel * speed_err
 
         # I
@@ -140,11 +156,12 @@ class Driver:
         command.accelerator = accel_p + accel_i
 
         if command.accelerator < 0:
-            command.brake = -command.accelerator - 0.5
+            command.brake = -command.accelerator - 0.4
 
-        # don't try to zoom if off the track
+        # avoid slipping and braking constantly when off the track
         if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 90:
-            command.accelerator = 0.2
+            command.accelerator *= 0.2
+            command.brake = 0
 
         command.accelerator = min(max(command.accelerator, 0), 1)
         command.brake = min(max(command.brake, 0), 1)
@@ -156,19 +173,15 @@ class Driver:
 
         # Update "old" values
         self.old_speed_err = speed_err
-        self.old_dist_from_desired = distance_from_desired
-        self.old_max_distances_from_edge.append(max(sensor.distances_from_edge))
-        self.old_edge_indices.append(edge_index)
-        self.old_sensor_area.append(sum(sensor.distances_from_edge))
+        self.old_dist_from_center = sensor.distance_from_center
+        self.old_forward_distances.append(middle_distances)
+        #self.old_edge_indices.append(edge_index)
 
         # Plot the sensor and control data
         self.cam_graph.add(sensor.distances_from_edge)
-        self.cam_graph_linear.add(np.multiply(LINEAR_TRANSFORM, sensor.distances_from_edge))
-        self.cam_graph2.add(edge_pos)
-        self.steer_graph.add([command.steering, dist, dist_derv, angle])
-        self.speed_graph.add([sensor.speed_x / MPS_PER_KMH, speed_des / MPS_PER_KMH])
+        self.steer_graph.add([command.steering, dist, dist_int, dist_derv, angle])
+        self.speed_graph.add([speed_average / MPS_PER_KMH, speed_des / MPS_PER_KMH])
         self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
-        self.area_graph.add(sum(sensor.distances_from_edge))
 
         return command
 
