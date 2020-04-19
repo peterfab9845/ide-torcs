@@ -22,8 +22,26 @@ MSG_RESTART = b'***restart***'
 TO_SOCKET_SEC = 1
 TO_SOCKET_MSEC = TO_SOCKET_SEC * 1000
 
-RNG_FNDR_ANGLES = [-90, -75, -60, -45, -30, -20, -15, -10, -5, 0, 5, 10, 15, 20, 30, 45, 60, 75, 90]
-
+# reduced field of view for better precision
+RNG_FNDR_ANGLES = [-30.00000,
+                   -26.66667,
+                   -23.33333,
+                   -20.00000,
+                   -16.66667,
+                   -13.33333,
+                   -10.00000,
+                    -6.66667,
+                    -3.33333,
+                     0.00000,
+                     3.33333,
+                     6.66667,
+                    10.00000,
+                    13.33333,
+                    16.66667,
+                    20.00000,
+                    23.33333,
+                    26.66667,
+                    30.00000]
 
 class State(enum.Enum):
     """ Enumeration representing the current state of the connection

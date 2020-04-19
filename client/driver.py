@@ -99,26 +99,22 @@ class Driver:
             # average because it jumps around a lot
             self.edge_indices.append(edge_index)
         edge_pos = np.mean(self.edge_indices)
-        desired_distance_from_center = (9 - edge_pos)
+        desired_distance_from_center = 0.5 * (9 - edge_pos)
 
         distance_from_desired = sensor.distance_from_center - desired_distance_from_center
 
         # want to flip the sign for steering command
         # this is good because its aggressive enough to make then turn, but doesnt throw off the car for future turns
-        Kp_steer = -.4
         Kp_steer = -.2
 
         # also use an integral term to stay where we want on turns
-        Ki_steer = -.015
         Ki_steer = 0
 
         # want the angle to also be aggressive so we can correct ourselves, but we want this Kp term to still be the
         # dominant factor in steering
         Ka_steer = 6
-        Ka_steer = 6
 
         # derivative term starts out really tiny, so we need a big multiplier (also negative)
-        Kd_steer = -6
         Kd_steer = 20
 
         self.center_dist_int = min(max(self.center_dist_int, -10), 10)
@@ -146,17 +142,19 @@ class Driver:
 
         # control speed based on how curved the track is
         
-        middle_distances = (1*sensor.distances_from_edge[7]
+        middle_distances = (1*sensor.distances_from_edge[6]
+                          + 1*sensor.distances_from_edge[7]
                           + 2*sensor.distances_from_edge[8]
                           + 2*sensor.distances_from_edge[9]
                           + 2*sensor.distances_from_edge[10]
-                          + 1*sensor.distances_from_edge[11])/8
+                          + 1*sensor.distances_from_edge[11]
+                          + 1*sensor.distances_from_edge[12])/10
         self.forward_distances.append(middle_distances)
         average_forward_distance = np.mean(self.forward_distances)
         if SAFE_CAR:
-            speed_des = 1.3 * MPS_PER_KMH * average_forward_distance
+            speed_des = 2 * MPS_PER_KMH * average_forward_distance
         else:
-            speed_des = 2.5 * MPS_PER_KMH * average_forward_distance
+            speed_des = 3 * MPS_PER_KMH * average_forward_distance
 
         # make desired speed not jump up quickly - match the car's real acceleration
         # not perfect for higher gears, but they aren't affected as much
