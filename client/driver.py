@@ -5,6 +5,8 @@
     Modified:
         03/29/2019 by Carson Clarke-Magrab <ctc7359@rit.edu>
         -   Adapted for IDE virtual NXP Cup.
+        2020-04-24 by Peter Fabinski <pnf9945@rit.edu> and Nabiel Kandiel <nmk1879@rit.edu>
+        -   Created driving algorithm.
 """
 import collections
 import time
@@ -13,7 +15,7 @@ from client.car import Actuator, Sensor
 from client.graph import Graph
 
 """ Change this to 1 to use the safer driving mode """
-SAFE_CAR = 0
+SAFE_CAR = 1
 
 MPS_PER_KMH = 1000 / 3600
 WHEEL_RADIUS_M = 0.3276 # meters

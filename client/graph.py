@@ -5,6 +5,8 @@
     Modified:
         03/29/2019 by Carson Clarke-Magrab <ctc7359@rit.edu>
         -
+        2020-04-24 by Peter Fabinski <pnf9945@rit.edu> and Nabiel Kandiel <nmk1879@rit.edu>
+        -   Added support for historical graphing.
 """
 
 import matplotlib.pyplot as plt

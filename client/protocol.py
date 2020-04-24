@@ -5,6 +5,8 @@
     Modified:   
         03/18/2019 by Carson Clarke-Magrab <ctc7359@rit.edu>
         -   Adapted for IDE virtual NXP Cup.
+        2020-04-24 by Peter Fabinski <pnf9945@rit.edu> and Nabiel Kandiel <nmk1879@rit.edu>
+        -   Adjusted range finder angles for more precise measurements.
 """
 import enum
 import logging
