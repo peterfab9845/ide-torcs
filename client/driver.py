@@ -17,7 +17,7 @@ from client.graph import Graph
 """ Change this to 1 to use the safer driving mode """
 SAFE_CAR = 0
 
-GRAPH = 1
+GRAPH = 0
 TIMER = 0
 
 MPS_PER_KMH = 1000 / 3600
