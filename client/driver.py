@@ -211,8 +211,8 @@ class Driver:
         command.accelerator = accel_p + accel_i
 
         # brake if we want to slow down fast
-        if command.accelerator + 0.35 < 0:
-            command.brake = 0.3*(-command.accelerator - 0.35)
+        if command.accelerator + 0.15 < 0:
+            command.brake = 0.3*(-command.accelerator - 0.15)
             # however, stop braking if we're slipping
             if abs(speed_wheels - sensor.speed_x) > 10:
                 command.brake = 0
