@@ -17,6 +17,9 @@ from client.graph import Graph
 """ Change this to 1 to use the safer driving mode """
 SAFE_CAR = 1
 
+GRAPH = 0
+TIMER = 0
+
 MPS_PER_KMH = 1000 / 3600
 WHEEL_RADIUS_M = 0.3276 # meters
 # calculated from rear wheel parameters in share/games/torcs/cars/car1-trb1/car1-trb1.xml
@@ -59,14 +62,15 @@ class Driver:
         self.gear_last = 0
 
         # Graph Parameters
-        self.steer_graph = Graph(title="Steering", ymin=-1, ymax=1, xmax=700, time=True,
-                                 labels=("Overall", "Location", "Angle", "dAngle"))
-        self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
-        self.edge_graph = Graph(title="Edge Location", ymin=0, ymax=18, xmax=700, time=True)
-        self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True,
-                                 labels=("Actual", "Desired"))
-        self.accel_graph = Graph(title="Accelerator", ymin=-0.4, ymax=1.1, xmax=700, time=True,
-                                 labels=("Overall", "P", "I", "Brake"))
+        if GRAPH:
+            self.steer_graph = Graph(title="Steering", ymin=-1, ymax=1, xmax=700, time=True,
+                                     labels=("Overall", "Location", "Angle", "dAngle"))
+            self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
+            self.edge_graph = Graph(title="Edge Location", ymin=0, ymax=18, xmax=700, time=True)
+            self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True,
+                                     labels=("Actual", "Desired"))
+            self.accel_graph = Graph(title="Accelerator", ymin=-0.4, ymax=1.1, xmax=700, time=True,
+                                     labels=("Overall", "P", "I", "Brake"))
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -78,8 +82,9 @@ class Driver:
             Returns: An Actuator populated with commands to send to the server
         """
 
-        # record times to see if we're taking too long
-        start_time = time.time()
+        # record times to see if we're taking too long to return a command
+        if TIMER:
+            start_time = time.time()
 
         command = Actuator()
 
@@ -217,28 +222,30 @@ class Driver:
         self.old_speed_des = speed_des
 
         # Plot the sensor and control data
-        self.cam_graph.add(sensor.distances_from_edge)
-        self.edge_graph.add(edge_pos)
-        self.steer_graph.add([command.steering, dist, angle, angle_derv])
-        self.speed_graph.add([speed_average / MPS_PER_KMH, speed_des / MPS_PER_KMH])
-        self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
+        if GRAPH:
+            self.cam_graph.add(sensor.distances_from_edge)
+            self.edge_graph.add(edge_pos)
+            self.steer_graph.add([command.steering, dist, angle, angle_derv])
+            self.speed_graph.add([speed_average / MPS_PER_KMH, speed_des / MPS_PER_KMH])
+            self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
 
         # see how long we're taking
-        exec_time = time.time() - start_time
-        if exec_time > 0.01:
-            print("Too slow for 1x!")
-        elif exec_time > 0.005:
-            print("Too slow for 2x!")
-        elif exec_time > 0.0025:
-            print("Too slow for 4x!")
-        elif exec_time > 0.00125:
-            print("Too slow for 8x!")
-        elif exec_time > 0.000625:
-            print("Too slow for 16x!")
-        elif exec_time > 0.0003125:
-            print("Too slow for 32x!")
-        #elif exec_time > 0.00015625:
-        #    print("Too slow for 64x!")
+        if TIMER:
+            exec_time = time.time() - start_time
+            if exec_time > 0.01:
+                print("Too slow for 1x!")
+            elif exec_time > 0.005:
+                print("Too slow for 2x!")
+            elif exec_time > 0.0025:
+                print("Too slow for 4x!")
+            elif exec_time > 0.00125:
+                print("Too slow for 8x!")
+            elif exec_time > 0.000625:
+                print("Too slow for 16x!")
+            elif exec_time > 0.0003125:
+                print("Too slow for 32x!")
+            #elif exec_time > 0.00015625:
+            #    print("Too slow for 64x!")
 
         return command
 
