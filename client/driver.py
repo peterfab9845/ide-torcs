@@ -56,6 +56,7 @@ class Driver:
         self.old_speed_des = 300
         self.speed_err_int = 0
         self.forward_distances = collections.deque([0] * 4, 4)
+        self.slipping = 0
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -217,6 +218,11 @@ class Driver:
             # however, stop braking if we're slipping
             if abs(speed_wheels - sensor.speed_x) > 10:
                 command.brake = 0
+                self.slipping = 5
+            # stay that way for the set number of ticks
+            if self.slipping > 0:
+                command.brake = 0
+                self.slipping -= 1
 
         # avoid slipping and braking constantly when off the track - low accelerator
         if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 90:
