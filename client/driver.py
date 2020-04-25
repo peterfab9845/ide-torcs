@@ -17,7 +17,7 @@ from client.graph import Graph
 """ Change this to 1 to use the safer driving mode """
 SAFE_CAR = 0
 
-GRAPH = 1
+GRAPH = 0
 TIMER = 0
 
 MPS_PER_KMH = 1000 / 3600
@@ -74,8 +74,6 @@ class Driver:
                                      labels=("Actual", "Desired"))
             self.accel_graph = Graph(title="Accelerator", ymin=-0.4, ymax=1.1, xmax=700, time=True,
                                      labels=("Overall", "P", "I", "Brake"))
-            self.wheel_graph = Graph(title="Wheel Velocities", ymin=-8000, ymax=8000, xmax=300, time=True,
-                                     labels=("Left", "Right"))
 
     def drive(self, sensor: Sensor) -> Actuator:
         """ Produces a set of Actuator commands in response to Sensor data from
@@ -216,9 +214,7 @@ class Driver:
         if command.accelerator + 0.35 < 0:
             command.brake = 0.3*(-command.accelerator - 0.35)
             # however, stop braking if we're slipping
-            if (abs(sensor.wheel_velocities[2]) < 4000 or
-                abs(sensor.wheel_velocities[3]) < 4000 or
-                abs(sensor.speed_y) > 1):
+            if abs(speed_wheels - sensor.speed_x) > 10:
                 command.brake = 0
 
         # avoid slipping and braking constantly when off the track - low accelerator
@@ -243,7 +239,6 @@ class Driver:
             self.steer_graph.add([command.steering, dist, angle, angle_derv])
             self.speed_graph.add([speed_average / MPS_PER_KMH, speed_des / MPS_PER_KMH])
             self.accel_graph.add([command.accelerator, accel_p, accel_i, command.brake])
-            self.wheel_graph.add([sensor.wheel_velocities[2], sensor.wheel_velocities[3]])
 
         # see how long we're taking
         if TIMER:
