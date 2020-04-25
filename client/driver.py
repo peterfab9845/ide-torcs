@@ -26,6 +26,9 @@ WHEEL_RADIUS_M = 0.3276 # meters
 # wheel_radius = (wheel_dia / 2) + (tire_height_width_ratio * tire_width)
 WHEEL_CIRCUM_M = 2 * np.pi * WHEEL_RADIUS_M # meters
 
+# expected speed increase in each gear. determined experimentally.
+SPEED_GEARS = [0.450, 0.189, 0.134, 0.090, 0.056, 0.032]
+
 class Driver:
     """ Car driving logic
 
@@ -67,7 +70,7 @@ class Driver:
                                      labels=("Overall", "Location", "Angle", "dAngle"))
             self.cam_graph = Graph(title="Sensors", ymin=0, ymax=200)
             self.edge_graph = Graph(title="Edge Location", ymin=0, ymax=18, xmax=700, time=True)
-            self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=300, xmax=700, time=True,
+            self.speed_graph = Graph(title="Speed (km/h)", ymin=-10, ymax=400, xmax=700, time=True,
                                      labels=("Actual", "Desired"))
             self.accel_graph = Graph(title="Accelerator", ymin=-0.4, ymax=1.1, xmax=700, time=True,
                                      labels=("Overall", "P", "I", "Brake"))
@@ -147,6 +150,9 @@ class Driver:
 
         """ Accelerator Control """
 
+        # Select the gear
+        command.gear = self.select_gear(sensor, command)
+
         # Set desired speed based on the curvature of the track
 
         # Weighted average emphasizing middle values (where car points)
@@ -169,8 +175,13 @@ class Driver:
 
         # make desired speed not jump up quickly - match the car's real acceleration
         # not perfect for higher gears, but they aren't affected as much
-        if (speed_des - self.old_speed_des) > 0.15:
-            speed_des = self.old_speed_des + 0.15
+        speed_increase = SPEED_GEARS[command.gear - 1]
+        if (speed_des - self.old_speed_des) > speed_increase:
+            speed_des = self.old_speed_des + speed_increase
+
+        # Also correct for big error at the beginning
+        if (speed_des - sensor.speed_x) > 5: # about 20km/h
+            speed_des = sensor.speed_x + 5
 
         # don't try to go really fast if off the track
         if abs(sensor.distance_from_center) > 0.95 or abs(sensor.angle) > 30:
@@ -220,9 +231,6 @@ class Driver:
         command.brake = min(max(command.brake, 0), 1)
 
         """ Graphs and misc """
-
-        # Select the gear
-        command.gear = self.select_gear(sensor, command)
 
         # Update "old" values
         self.old_angle = sensor.angle
