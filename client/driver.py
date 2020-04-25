@@ -17,7 +17,7 @@ from client.graph import Graph
 """ Change this to 1 to use the safer driving mode """
 SAFE_CAR = 0
 
-GRAPH = 0
+GRAPH = 1
 TIMER = 0
 
 MPS_PER_KMH = 1000 / 3600
@@ -50,12 +50,12 @@ class Driver:
 
         # steering
         self.old_angle = 0
-        self.edge_indices = collections.deque([9] * 25, 25)
+        self.edge_indices = collections.deque([9] * 3, 3)
 
         # speed
         self.old_speed_des = 300
         self.speed_err_int = 0
-        self.forward_distances = collections.deque([0] * 7, 7)
+        self.forward_distances = collections.deque([0] * 4, 4)
 
         # Shifting Parameters
         self.rpm_max = 8500
@@ -105,7 +105,8 @@ class Driver:
             self.edge_indices.append(9)
         else:
             # Otherwise, the edge is right next to the maximum
-            edge_index = sensor.distances_from_edge.index(max(sensor.distances_from_edge))
+            averaged_distances = np.convolve(sensor.distances_from_edge, [1/3]*3, mode='valid')
+            edge_index = np.argmax(averaged_distances) + 1
             # average because it jumps around a lot
             self.edge_indices.append(edge_index)
         edge_pos = np.mean(self.edge_indices)
@@ -117,11 +118,11 @@ class Driver:
         # Need a negative sign here to go back to the center.
         # distance_from_desired > 0 means we are too far left.
         # If this value is higher, we get too much oscillation and can't control the car
-        Kp_steer = -.2
+        Kp_steer = -.4
 
         # We want the angle to be aggressive so we can correct ourselves, but we want the distance
         # to our desired position to still be the dominant factor in steering.
-        Ka_steer = 6
+        Ka_steer = 3
 
         # Derivative term for angle.
         # derivative term starts out very small, so we need a big multiplier.
